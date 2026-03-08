@@ -22,14 +22,36 @@ memories/
 │   │   ├── base.py          # shared interface all source adapters implement
 │   │   ├── snapchat.py      # Snapchat-specific ingest logic
 │   │   └── iphone.py        # iPhone-specific ingest logic (future)
+│   ├── api/
+│   │   ├── main.py          # FastAPI app, CORS, static file serving
+│   │   ├── auth.py          # single-password JWT auth
+│   │   └── routes/
+│   │       ├── media.py     # timeline, detail, file serving endpoints
+│   │       ├── people.py    # people list + person gallery endpoints
+│   │       └── search.py    # CLIP, tag, transcript search endpoints
 │   ├── enrich.py            # source-agnostic enrichment pipeline
-│   └── query.py             # CLI query interface
+│   ├── query.py             # CLI query interface
+│   └── thumbnails.py        # one-time thumbnail + video poster frame generation
+│
+├── web/                     # Vue 3 + Vite frontend
+│   ├── src/
+│   │   ├── views/
+│   │   │   ├── Login.vue
+│   │   │   ├── Timeline.vue
+│   │   │   ├── People.vue
+│   │   │   ├── Search.vue
+│   │   │   └── Detail.vue
+│   │   └── api.js           # fetch wrapper, attaches JWT, redirects on 401
+│   └── vite.config.js       # proxies /api to FastAPI in dev
+│
+├── .env                     # APP_PASSWORD, SECRET_KEY — gitignored
+├── .env.example             # committed, shows required vars without values
 │
 └── data/                    # gitignored, never committed
-    ├── originals/           # write-protected after copy (chmod -R 444)
-    │   ├── snapchat/        # memories_history.json, photos/, videos/
-    │   └── iphone/
-    ├── processed/           # working copies for resizing, transcoding
+    ├── originals/           # write-protected after copy
+    │   └── snapchat/
+    ├── processed/
+    │   └── thumbnails/      # {media_id}.jpg for all photos and videos
     └── db/
         ├── memories.db      # single unified SQLite database
         └── face_embeddings/ # face embedding vectors
@@ -81,13 +103,24 @@ All models run offline with no API keys:
 - Never use cloud vision APIs
 - No external API keys required or used
 
+## Web Interface
+
+**Stack:** FastAPI backend + Vue 3 (Vite) frontend. Mobile-first. Password-protected.
+
+**Build phases:**
+1. **Phase 0 — Prerequisites:** install `fastapi uvicorn python-jose[cryptography] python-multipart python-dotenv`, Node.js, scaffold `web/` with `npm create vite@latest web -- --template vue`
+2. **Phase 1 — Thumbnails:** run `python -m src.thumbnails` once to pre-generate `data/processed/thumbnails/{id}.jpg` for all photos (Pillow) and videos (ffmpeg first frame)
+3. **Phase 2 — Backend:** FastAPI with JWT auth middleware; routes for timeline, people, search, file serving
+4. **Phase 3 — Frontend:** Vue Router + 5 views (Login, Timeline, People, Search, Detail); 2-col mobile grid; video play overlay on thumbnails
+5. **Phase 4 — Integration:** dev uses Vite proxy (`/api → :8000`); prod builds Vue to `web/dist/` served as static files by FastAPI
+
+**Auth:** single `APP_PASSWORD` in `.env` → JWT token (7-day expiry) stored in browser localStorage. All API routes protected. `.env` is gitignored; `.env.example` is committed.
+
+**Access:** home network (`localhost` / `192.168.x.x`) for now. Tailscale remote access is a future drop-in with no code changes.
+
 ## Future Extensibility
 
 **iPhone Photos:**
 - Mac Photos app export preserves EXIF fully
 - `osxphotos` library can export with existing face clusters and album metadata
 - Approach TBD (user doesn't currently have Mac)
-
-**Web UI:**
-- CLI architecture designed to translate cleanly to Flask/FastAPI backend
-- Access via same-network (192.168.x.x) or Tailscale VPN for remote access

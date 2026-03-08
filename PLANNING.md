@@ -123,14 +123,59 @@ iPhone EXIF data is richer than Snapchat's export in some ways (native GPS, devi
 
 ---
 
-## Future: Web UI & Mobile Access
+## Web Interface
 
-When evolving from CLI to a web interface (Flask or FastAPI recommended):
+### Stack
+- **Backend:** FastAPI + Uvicorn (Python)
+- **Frontend:** Vue 3 + Vite
+- **Auth:** Single password (`APP_PASSWORD` in `.env`) → JWT token, 7-day expiry, stored in browser localStorage
+- **Design:** Mobile-first, 2-col grid on phone / 3-4 col on desktop
 
-- **Same-network access:** Run the server locally, access via `192.168.x.x:5000` on home WiFi — simplest option
-- **Remote access:** Use **Tailscale** (personal VPN) to reach the home machine securely from anywhere without exposing it to the public internet — recommended approach
-- **Always-on:** Consider migrating to a low-power home server (Raspberry Pi or mini PC) so the computer doesn't need to be awake for access
-- The CLI-first architecture will translate cleanly to a web backend since the query logic is already separated
+### Views
+| View | Description |
+|------|-------------|
+| Login | Password form, stores JWT on success |
+| Timeline | Infinite scroll grid grouped by month/year |
+| People | Named face clusters → click into person gallery |
+| Search | Natural language (CLIP), tag, and transcript search |
+| Detail | Full media + metadata panel (date, location, tags, people) + prev/next nav |
+
+### Build Phases
+
+**Phase 0 — Prerequisites**
+- Install Python deps: `fastapi uvicorn python-jose[cryptography] python-multipart python-dotenv`
+- Install Node.js
+- Scaffold frontend: `npm create vite@latest web -- --template vue`
+- Create `.env` with `APP_PASSWORD` and `SECRET_KEY` (gitignored)
+- Commit `.env.example` showing required variable names without values
+
+**Phase 1 — Thumbnail generation** (`src/thumbnails.py`)
+- Run once before launching the server: `python -m src.thumbnails`
+- Photos: Pillow resize to 400px JPEG → `data/processed/thumbnails/{id}.jpg`
+- Videos: ffmpeg extract first frame → same path
+- Idempotent — skips already-generated thumbnails
+
+**Phase 2 — FastAPI backend** (`src/api/`)
+- `main.py` — app init, CORS, serves Vue `dist/` as static files in production
+- `auth.py` — password verify → issue JWT; middleware protects all `/api` routes
+- `routes/media.py` — `GET /api/timeline` (paginated), `GET /api/media/{id}`, `GET /files/{id}` (stream original), `GET /thumbnails/{id}`
+- `routes/people.py` — `GET /api/people`, `GET /api/people/{id}/media`
+- `routes/search.py` — `GET /api/search?q=` (CLIP), tag search, transcript search
+
+**Phase 3 — Vue frontend** (`web/src/`)
+- Vue Router for navigation between views
+- `api.js` — shared fetch wrapper that attaches JWT header, redirects to Login on 401
+- Video items display play button overlay on thumbnail in grid
+- Detail view shows video player (HTML5 `<video>`) or full-res photo + metadata sidebar
+
+**Phase 4 — Integration**
+- Dev: Vite proxy (`/api → localhost:8000`) so both servers run independently
+- Prod: `npm run build` → FastAPI serves `web/dist/` at `/`
+- Single prod command: `uvicorn src.api.main:app --host 0.0.0.0 --port 8000`
+
+### Access
+- **Now:** `http://localhost:8000` or `http://192.168.x.x:8000` on home network
+- **Future:** Tailscale VPN for remote access — no code changes needed, just install Tailscale on the host machine
 
 ---
 
