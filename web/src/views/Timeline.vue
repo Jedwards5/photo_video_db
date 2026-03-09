@@ -33,8 +33,12 @@
   </div>
 </template>
 
+<script>
+export default { name: 'Timeline' }
+</script>
+
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue'
 import { api } from '../api'
 
 const items = ref([])
@@ -71,6 +75,10 @@ async function loadPage() {
     loading.value = false
   }
 }
+
+let savedScroll = 0
+onDeactivated(() => { savedScroll = window.scrollY })
+onActivated(() => { window.scrollTo(0, savedScroll) })
 
 let observer
 onMounted(() => {
